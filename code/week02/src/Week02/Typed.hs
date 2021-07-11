@@ -30,21 +30,27 @@ import           Playground.Types     (KnownCurrency (..))
 import           Prelude              (IO, Semigroup (..), String)
 import           Text.Printf          (printf)
 
+
+
+newtype MyType  = MyType Integer
+
+PlutusTx.unstableMakeIsData ''MyType
+
 {-# INLINABLE mkValidator #-}
-mkValidator :: () -> Integer -> ScriptContext -> Bool
-mkValidator _ r _ = traceIfFalse "wrong redeemer" $ r == 42
+mkValidator :: () -> MyType -> ScriptContext -> Bool
+mkValidator _ (MyType r) _ = traceIfFalse "wrong redeemer" $ r == 42
 
 data Typed
 instance Scripts.ValidatorTypes Typed where
     type instance DatumType Typed = ()
-    type instance RedeemerType Typed = Integer
+    type instance RedeemerType Typed = MyType
 
 typedValidator :: Scripts.TypedValidator Typed
 typedValidator = Scripts.mkTypedValidator @Typed
     $$(PlutusTx.compile [|| mkValidator ||])
     $$(PlutusTx.compile [|| wrap ||])
   where
-    wrap = Scripts.wrapValidator @() @Integer
+    wrap = Scripts.wrapValidator @() @MyType
 
 validator :: Validator
 validator = Scripts.validatorScript typedValidator
@@ -73,7 +79,7 @@ grab r = do
         lookups = Constraints.unspentOutputs utxos      <>
                   Constraints.otherScript validator
         tx :: TxConstraints Void Void
-        tx      = mconcat [mustSpendScriptOutput oref $ Redeemer $ I r | oref <- orefs]
+        tx      = mconcat [mustSpendScriptOutput oref $ Redeemer $ PlutusTx.toData (MyType r ) | oref <- orefs]
     ledgerTx <- submitTxConstraintsWith @Void lookups tx
     void $ awaitTxConfirmed $ txId ledgerTx
     logInfo @String $ "collected gifts"
